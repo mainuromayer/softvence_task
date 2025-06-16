@@ -73,7 +73,7 @@
                                 </div>
                                 @if($course->thumbnail)
                                     <small class="form-text text-muted">
-                                        Current thumbnail: <a href="{{ Storage::url($course->thumbnail) }}" target="_blank">{{ basename($course->thumbnail) }}</a>
+                                        Current thumbnail: <a href="{{ $course->thumbnail ? asset('storage/' . $course->thumbnail) : asset('images/default-thumbnail.png') }}" target="_blank">{{ basename($course->thumbnail) }}</a>
                                     </small>
                                 @endif
                                 @error('thumbnail')
@@ -157,7 +157,7 @@
                                                                     <label class="custom-file-label">Choose new file (current: {{ basename($content->content) }})</label>
                                                                     <input type="hidden" name="modules[{{ $moduleIndex + 1 }}][contents][{{ $contentIndex + 1 }}][existing_file]" value="{{ $content->content }}">
                                                                     <small class="form-text text-muted">
-                                                                        Current file: <a href="{{ Storage::url($content->content) }}" target="_blank">{{ basename($content->content) }}</a>
+                                                                        Current file: <a href="{{ asset('storage/' . $content->content) }}" target="_blank">{{ basename($content->content) }}</a>
                                                                     </small>
                                                                 </div>
                                                             @else

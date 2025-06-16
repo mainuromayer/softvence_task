@@ -45,7 +45,12 @@ class CourseController extends Controller
             // Handle course thumbnail
             $thumbnailPath = null;
             if ($request->hasFile('thumbnail')) {
-                $thumbnailPath = $request->file('thumbnail')->store('course-thumbnails', 'public');
+                $thumbnail = $request->file('thumbnail');
+                $thumbnailPath = $thumbnail->storeAs(
+                    'course-thumbnails/' . date('Y/m'),
+                    $thumbnail->getClientOriginalName(),
+                    'public'
+                );
             }
             
             // Create course
@@ -61,7 +66,6 @@ class CourseController extends Controller
                 foreach ($request->modules as $moduleData) {
                     $module = $course->modules()->create([
                         'title' => $moduleData['title'],
-                        'order' => $course->modules()->count() + 1,
                     ]);
                     
                     if (isset($moduleData['contents'])) {
@@ -70,15 +74,20 @@ class CourseController extends Controller
                                 'title' => $contentData['title'],
                                 'type' => $contentData['type'],
                                 'description' => $contentData['description'] ?? null,
-                                'order' => $module->contents()->count() + 1,
                             ];
                             
                             // Handle content based on type
                             if (in_array($contentData['type'], ['image', 'video', 'file'])) {
                                 if (isset($contentData['content_file'])) {
                                     $file = $contentData['content_file'];
-                                    $path = $file->store("module-contents/{$module->id}", 'public');
+                                    $path = $file->storeAs(
+                                        'module-contents/' . $module->id . '/' . date('Y/m'),
+                                        $file->getClientOriginalName(),
+                                        'public'
+                                    );
+                                    
                                     $content['content'] = $path;
+                                    $content['original_filename'] = $file->getClientOriginalName(); // Store original name
                                 }
                             } else {
                                 $content['content'] = $contentData['content'] ?? null;
@@ -97,7 +106,6 @@ class CourseController extends Controller
             DB::rollBack();
             Log::error('Course creation failed: ' . $e->getMessage());
             
-            // Clean up uploaded files if any
             if (isset($thumbnailPath)) {
                 Storage::disk('public')->delete($thumbnailPath);
             }
@@ -138,14 +146,18 @@ class CourseController extends Controller
         try {
             // Handle course thumbnail
             $thumbnailPath = $course->thumbnail;
-            if ($request->hasFile('thumbnail')) {
-                // Delete old thumbnail if exists
-                if ($course->thumbnail) {
-                    Storage::disk('public')->delete($course->thumbnail);
-                }
-                $thumbnailPath = $request->file('thumbnail')->store('course-thumbnails', 'public');
+        if ($request->hasFile('thumbnail')) {
+            // Delete old thumbnail if exists
+            if ($course->thumbnail) {
+                Storage::disk('public')->delete($course->thumbnail);
             }
-            
+            $thumbnail = $request->file('thumbnail');
+            $thumbnailPath = $thumbnail->storeAs(
+                'course-thumbnails/' . date('Y/m'),
+                $thumbnail->getClientOriginalName(),
+                'public'
+            );
+        }
             // Update course
             $course->update([
                 'title' => $request->title,
@@ -156,7 +168,7 @@ class CourseController extends Controller
             
             // Get existing module IDs to track what to keep
             $existingModuleIds = [];
-            $existingContentIds = [];
+        $existingContentIds = [];
             
             // Handle modules and contents
             if ($request->has('modules')) {
@@ -168,7 +180,6 @@ class CourseController extends Controller
                     } else {
                         $module = $course->modules()->create([
                             'title' => $moduleData['title'],
-                            'order' => $course->modules()->count() + 1,
                         ]);
                     }
                     $existingModuleIds[] = $module->id;
@@ -191,10 +202,19 @@ class CourseController extends Controller
                                     }
                                     // Store new file
                                     $file = $contentData['content_file'];
-                                    $path = $file->store("module-contents/{$module->id}", 'public');
+                                    $path = $file->storeAs(
+                                        'module-contents/' . $module->id . '/' . date('Y/m'),
+                                        $file->getClientOriginalName(),
+                                        'public'
+                                    );
                                     $content['content'] = $path;
+                                    $content['original_filename'] = $file->getClientOriginalName();
                                 } elseif (isset($contentData['existing_file'])) {
                                     $content['content'] = $contentData['existing_file'];
+                                    // Keep the original filename if not updating the file
+                                    if (isset($contentData['existing_filename'])) {
+                                        $content['original_filename'] = $contentData['existing_filename'];
+                                    }
                                 }
                             } else {
                                 $content['content'] = $contentData['content'] ?? null;
@@ -205,10 +225,8 @@ class CourseController extends Controller
                                 $contentModel = $module->contents()->findOrFail($contentData['id']);
                                 $contentModel->update($content);
                             } else {
-                                $content['order'] = $module->contents()->count() + 1;
                                 $module->contents()->create($content);
                             }
-                            $existingContentIds[] = $contentModel->id ?? null;
                         }
                     }
                 }
