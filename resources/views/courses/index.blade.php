@@ -7,7 +7,7 @@
         <div class="card-header">
             <h3 class="card-title">All Courses</h3>
             <div class="card-tools">
-                <a href="{{ route('courses.create') }}" class="btn btn-sm btn-success">
+                <a href="{{ route('courses.create') }}" class="btn btn-sm btn-light text-dark">
                     <i class="fas fa-plus"></i> Create New
                 </a>
             </div>

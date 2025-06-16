@@ -140,111 +140,107 @@ class CourseController extends Controller
      * Update the specified resource in storage.
      */
     public function update(StoreCourseRequest $request, Course $course)
-    {
-        DB::beginTransaction();
+{
+    DB::beginTransaction();
+    
+    try {
+        // Validate the request
+        $validated = $request->validated();
         
-        try {
-            // Handle course thumbnail
-            $thumbnailPath = $course->thumbnail;
+        // Handle course thumbnail
+        $thumbnailPath = $course->thumbnail;
         if ($request->hasFile('thumbnail')) {
-            // Delete old thumbnail if exists
             if ($course->thumbnail) {
                 Storage::disk('public')->delete($course->thumbnail);
             }
-            $thumbnail = $request->file('thumbnail');
-            $thumbnailPath = $thumbnail->storeAs(
+            $thumbnailPath = $request->file('thumbnail')->store(
                 'course-thumbnails/' . date('Y/m'),
-                $thumbnail->getClientOriginalName(),
                 'public'
             );
         }
-            // Update course
-            $course->update([
-                'title' => $request->title,
-                'description' => $request->description,
-                'category' => $request->category,
-                'thumbnail' => $thumbnailPath,
-            ]);
-            
-            // Get existing module IDs to track what to keep
-            $existingModuleIds = [];
+        
+        // Update course
+        $course->update([
+            'title' => $validated['title'],
+            'description' => $validated['description'],
+            'category' => $validated['category'],
+            'thumbnail' => $thumbnailPath,
+        ]);
+        
+        // Track existing modules and contents
+        $existingModuleIds = [];
         $existingContentIds = [];
+        
+        foreach ($validated['modules'] as $moduleData) {
+            // Validate module has contents
+            if (empty($moduleData['contents'])) {
+                throw new \Exception('Each module must have at least one content item.');
+            }
             
-            // Handle modules and contents
-            if ($request->has('modules')) {
-                foreach ($request->modules as $moduleData) {
-                    // Update or create module
-                    if (isset($moduleData['id'])) {
-                        $module = $course->modules()->findOrFail($moduleData['id']);
-                        $module->update(['title' => $moduleData['title']]);
-                    } else {
-                        $module = $course->modules()->create([
-                            'title' => $moduleData['title'],
-                        ]);
-                    }
-                    $existingModuleIds[] = $module->id;
-                    
-                    // Handle contents
-                    if (isset($moduleData['contents'])) {
-                        foreach ($moduleData['contents'] as $contentData) {
-                            $content = [
-                                'title' => $contentData['title'],
-                                'type' => $contentData['type'],
-                                'description' => $contentData['description'] ?? null,
-                            ];
-                            
-                            // Handle content based on type
-                            if (in_array($contentData['type'], ['image', 'video', 'file'])) {
-                                if (isset($contentData['content_file'])) {
-                                    // Delete old file if exists
-                                    if (isset($contentData['existing_file'])) {
-                                        Storage::disk('public')->delete($contentData['existing_file']);
-                                    }
-                                    // Store new file
-                                    $file = $contentData['content_file'];
-                                    $path = $file->storeAs(
-                                        'module-contents/' . $module->id . '/' . date('Y/m'),
-                                        $file->getClientOriginalName(),
-                                        'public'
-                                    );
-                                    $content['content'] = $path;
-                                    $content['original_filename'] = $file->getClientOriginalName();
-                                } elseif (isset($contentData['existing_file'])) {
-                                    $content['content'] = $contentData['existing_file'];
-                                    // Keep the original filename if not updating the file
-                                    if (isset($contentData['existing_filename'])) {
-                                        $content['original_filename'] = $contentData['existing_filename'];
-                                    }
-                                }
-                            } else {
-                                $content['content'] = $contentData['content'] ?? null;
-                            }
-                            
-                            // Update or create content
-                            if (isset($contentData['id'])) {
-                                $contentModel = $module->contents()->findOrFail($contentData['id']);
-                                $contentModel->update($content);
-                            } else {
-                                $module->contents()->create($content);
-                            }
+            // Update or create module
+            $module = isset($moduleData['id']) 
+                ? $course->modules()->findOrFail($moduleData['id'])
+                : $course->modules()->create(['title' => $moduleData['title']]);
+            
+            $module->update(['title' => $moduleData['title']]);
+            $existingModuleIds[] = $module->id;
+            
+            // Process contents
+            foreach ($moduleData['contents'] as $contentData) {
+                $content = [
+                    'title' => $contentData['title'],
+                    'type' => $contentData['type'],
+                    'description' => $contentData['description'] ?? null,
+                ];
+                
+                // Handle content based on type
+                if (in_array($contentData['type'], ['image', 'video', 'file'])) {
+                    if (isset($contentData['content_file'])) {
+                        // Delete old file if exists
+                        if (isset($contentData['existing_file'])) {
+                            Storage::disk('public')->delete($contentData['existing_file']);
                         }
+                        // Store new file
+                        $path = $contentData['content_file']->store(
+                            'module-contents/' . $module->id . '/' . date('Y/m'),
+                            'public'
+                        );
+                        $content['content'] = $path;
+                        $content['original_filename'] = $contentData['content_file']->getClientOriginalName();
+                    } elseif (isset($contentData['existing_file'])) {
+                        $content['content'] = $contentData['existing_file'];
                     }
+                } else {
+                    $content['content'] = $contentData['content'] ?? null;
+                }
+                
+                // Update or create content
+                if (isset($contentData['id'])) {
+                    $contentModel = $module->contents()->findOrFail($contentData['id']);
+                    $contentModel->update($content);
+                    $existingContentIds[] = $contentModel->id;
+                } else {
+                    $newContent = $module->contents()->create($content);
+                    $existingContentIds[] = $newContent->id;
                 }
             }
             
-            // Delete modules not present in the request
-            $course->modules()->whereNotIn('id', $existingModuleIds)->delete();
-            
-            DB::commit();
-            return redirect()->route('courses.index')->with('success', 'Course updated successfully!');
-            
-        } catch (Exception $e) {
-            DB::rollBack();
-            Log::error('Course update failed: ' . $e->getMessage());
-            
-            return back()->withInput()->with('error', 'Failed to update course. Please try again.');
+            // Delete contents not present in the request
+            $module->contents()->whereNotIn('id', $existingContentIds)->delete();
         }
+        
+        // Delete modules not present in the request
+        $course->modules()->whereNotIn('id', $existingModuleIds)->delete();
+        
+        DB::commit();
+        return redirect()->route('courses.index')->with('success', 'Course updated successfully!');
+        
+    } catch (Exception $e) {
+        DB::rollBack();
+        Log::error('Course update failed: ' . $e->getMessage());
+        return back()->withInput()->with('error', $e->getMessage());
     }
+}
 
     /**
      * Remove the specified resource from storage.
@@ -261,52 +257,6 @@ class CourseController extends Controller
             return back()->with('error', 'Error deleting course: '.$e->getMessage());
         }
     }
-
-
-    public function storeModule(Request $request, Course $course)
-{
-    $request->validate(['title' => 'required|string|max:255']);
-    
-    $course->modules()->create($request->only('title'));
-    return back()->with('success', 'Module added successfully');
-}
-
-public function destroyModule(Course $course, Module $module)
-{
-    $module->delete();
-    return back()->with('success', 'Module deleted successfully');
-}
-
-public function storeContent(Request $request, Module $module)
-{
-    $request->validate([
-        'title' => 'required|string|max:255',
-        'type' => 'required|in:text,image,video,file,link',
-        'content' => 'required_if:type,text,link',
-        'content_file' => 'required_if:type,image,video,file|file'
-    ]);
-
-    $contentData = $request->only('title', 'type', 'description');
-    
-    if (in_array($request->type, ['image', 'file', 'video'])) {
-        $path = $request->file('content_file')->store('public/module-contents');
-        $contentData['content'] = str_replace('public/', '', $path);
-    } else {
-        $contentData['content'] = $request->content;
-    }
-
-    $module->contents()->create($contentData);
-    return back()->with('success', 'Content added successfully');
-}
-
-public function destroyContent(Course $course, Content $content)
-{
-    if (in_array($content->type, ['image', 'file', 'video'])) {
-        Storage::delete('public/'.$content->content);
-    }
-    $content->delete();
-    return back()->with('success', 'Content deleted successfully');
-}
 
 
 }
