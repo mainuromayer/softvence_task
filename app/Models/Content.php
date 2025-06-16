@@ -13,7 +13,6 @@ class Content extends Model
         'type',
         'content',
         'description',
-        'order'
     ];
 
     public function module()

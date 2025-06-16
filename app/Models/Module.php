@@ -13,7 +13,6 @@ class Module extends Model
     protected $fillable = [
         'course_id',
         'title',
-        'order'
     ];
 
     public function course(): BelongsTo

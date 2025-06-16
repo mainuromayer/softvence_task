@@ -2,8 +2,6 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\CourseController;
-use App\Http\Controllers\ModuleController;
-use App\Http\Controllers\ContentController;
 
 Route::get('/', function () {
     return redirect()->route('courses.index');
@@ -11,5 +9,15 @@ Route::get('/', function () {
 
 
 Route::resource('courses', CourseController::class);
-Route::resource('modules', ModuleController::class);
-Route::resource('contents', ContentController::class);
+
+// Course module routes
+Route::post('/courses/{course}/modules', [CourseController::class, 'storeModule'])
+     ->name('courses.module.store');
+Route::delete('/courses/{course}/modules/{module}', [CourseController::class, 'destroyModule'])
+     ->name('courses.module.destroy');
+
+// Course content routes
+Route::post('/courses/{module}/contents', [CourseController::class, 'storeContent'])
+     ->name('courses.content.store');
+Route::delete('/courses/{course}/contents/{content}', [CourseController::class, 'destroyContent'])
+     ->name('courses.content.destroy');

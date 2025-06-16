@@ -17,7 +17,6 @@ return new class extends Migration {
             $table->foreignId('module_id')->constrained('modules')->onDelete('cascade');
             $table->enum('type', ['text', 'image', 'video', 'file', 'link']);
             $table->text('content');
-            $table->integer('order')->default(0);
             $table->timestamps();
         });
     }

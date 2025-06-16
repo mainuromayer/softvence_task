@@ -1,60 +1,58 @@
 @extends('app')
 
-@section('title', 'Courses')
+@section('title', 'All Courses')
 
 @section('content')
-    <div class="card">
+    <div class="card card-primary mt-3">
         <div class="card-header">
-            <h3 class="card-title">Courses</h3>
-            <a href="{{ route('courses.create') }}" class="btn btn-primary float-right">Create New Course</a>
+            <h3 class="card-title">All Courses</h3>
+            <div class="card-tools">
+                <a href="{{ route('courses.create') }}" class="btn btn-sm btn-success">
+                    <i class="fas fa-plus"></i> Create New
+                </a>
+            </div>
         </div>
-        <div class="card-body">
-            @if(session('success'))
-                <div class="alert alert-success">
-                    {{ session('success') }}
-                </div>
-            @endif
-
-            @if(session('error'))
-                <div class="alert alert-danger">
-                    {{ session('error') }}
-                </div>
-            @endif
-
-            <table class="table table-bordered" id="courses-table">
+        <div class="card-body p-0">
+            <table class="table table-striped">
                 <thead>
                     <tr>
-                        <th>ID</th>
-                        <th>Thumbnail</th>
+                        <th style="width: 10px">#</th>
                         <th>Title</th>
                         <th>Category</th>
                         <th>Modules</th>
-                        <th>Actions</th>
+                        <th>Contents</th>
+                        <th style="width: 150px">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse($courses as $course)
-                        <tr id="course-{{ $course->id }}">
-                            <td>{{ $course->id }}</td>
-                            <td>
-                                <img src="{{ $course->thumbnail_url }}" alt="{{ $course->title }}" 
-                                     style="max-width: 100px; max-height: 60px;" class="img-thumbnail">
-                            </td>
-                            <td>{{ $course->title }}</td>
-                            <td>{{ $course->category }}</td>
-                            <td>{{ $course->modules_count }}</td>
-                            <td>
-                                <a href="{{ route('courses.show', $course) }}" class="btn btn-info btn-sm"><i class="fas fa-eye"></i></a>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="6" class="text-center">No courses found</td>
-                        </tr>
-                    @endforelse
+                    @foreach($courses as $course)
+                    <tr>
+                        <td>{{ $loop->iteration }}</td>
+                        <td>{{ $course->title }}</td>
+                        <td>{{ $course->category }}</td>
+                        <td>{{ $course->modules_count }}</td>
+                        <td>{{ $course->contents_through_modules_count }}</td>
+                        <td>
+                            <a href="{{ route('courses.show', $course->id) }}" class="btn btn-sm btn-info">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            <a href="{{ route('courses.edit', $course->id) }}" class="btn btn-sm btn-primary">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <form action="{{ route('courses.destroy', $course->id) }}" method="POST" style="display: inline;">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure?')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    @endforeach
                 </tbody>
             </table>
-
+        </div>
+        <div class="card-footer">
             {{ $courses->links() }}
         </div>
     </div>
